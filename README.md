@@ -1,10 +1,10 @@
-# NLP Sentiment Analysis Pipeline 🚀
+# NLP Sentiment Analysis Pipeline
 
 A lightweight, end-to-end Machine Learning pipeline featuring a custom **PyTorch Deep Learning Binary Classifier** built from scratch, deployed via an interactive **Streamlit** web application dashboard. 
 
 ---
 
-## 🛠️ Architecture & Workflow
+## Architecture & Workflow
 
 The system takes raw text string inputs and processes them through an entire localized MLOps pipeline:
 
