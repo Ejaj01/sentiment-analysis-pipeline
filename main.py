@@ -1,16 +1,15 @@
-# This is a sample Python script.
+import os
+import subprocess
+import sys
 
-# Press Ctrl+F5 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+if __name__ == "__main__":
+    print("🚀 Initializing Sentiment Analysis Dashboard Deployment Pipeline...")
 
+    # Locate the path to the interactive Streamlit interface
+    app_path = os.path.join("src", "app.py")
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press F9 to toggle the breakpoint.
-
-
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+    # Programmatically execute the Streamlit server using the active system python path
+    try:
+        subprocess.run([sys.executable, "-m", "streamlit", "run", app_path], check=True)
+    except KeyboardInterrupt:
+        print("\n🛑 Local deployment server terminated successfully.")
