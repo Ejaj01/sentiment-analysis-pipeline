@@ -12,4 +12,4 @@ if __name__ == "__main__":
     try:
         subprocess.run([sys.executable, "-m", "streamlit", "run", app_path], check=True)
     except KeyboardInterrupt:
-        print("\n🛑 Local deployment server terminated successfully.")
+        print("\n Local deployment server terminated successfully.")
