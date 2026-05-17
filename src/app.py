@@ -61,6 +61,6 @@ if st.button("Analyze Sentiment"):
         st.metric(label="Model Confidence Score (Positive Probability)", value=f"{prediction:.4f}")
 
         if prediction >= 0.5:
-            st.success(f"🟢 **Positive Sentiment Detected!** (Confidence: {prediction * 100:.1f}%)")
+            st.success(f" **Positive Sentiment Detected!** (Confidence: {prediction * 100:.1f}%)")
         else:
-            st.error(f"🔴 **Negative Sentiment Detected!** (Confidence: {(1 - prediction) * 100:.1f}%)")
+            st.error(f" **Negative Sentiment Detected!** (Confidence: {(1 - prediction) * 100:.1f}%)")
