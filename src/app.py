@@ -3,7 +3,9 @@ import torch
 import torch.nn as nn
 import pickle
 import os
+import csv
 from pathlib import Path
+from datetime import datetime
 
 # Define the Neural Network structure
 class SentimentClassifier(nn.Module):
@@ -74,6 +76,20 @@ def load_assets():
     model.eval()
     return vectorizer, model
 
+# Save prediction to CSV
+def save_prediction_to_csv(input_text, prediction, sentiment):
+    csv_file = "prediction_history.csv"
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Check if file exists to determine if we need to write headers
+    file_exists = Path(csv_file).exists()
+    
+    with open(csv_file, "a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(["Timestamp", "Input Text", "Prediction Score", "Sentiment"])
+        writer.writerow([timestamp, input_text, f"{prediction:.4f}", sentiment])
+
 # Load model
 vectorizer, model = load_assets()
 
@@ -101,6 +117,12 @@ if st.button("Analyze Sentiment", use_container_width=True):
         with torch.no_grad():
             prediction = model(input_tensor).item()
 
+        # Determine sentiment
+        sentiment = "Positive" if prediction >= 0.5 else "Negative"
+        
+        # Save to CSV
+        save_prediction_to_csv(user_input, prediction, sentiment)
+
         # Display results cleanly based on the 0 to 1 confidence score
         st.write("---")
         st.metric(label="Model Confidence Score (Positive Probability)", value=f"{prediction:.4f}")
@@ -117,3 +139,25 @@ if st.button("Analyze Sentiment", use_container_width=True):
             st.write(f"**Input Text:** {user_input}")
             st.write(f"**Raw Prediction Score:** {prediction:.6f}")
             st.write(f"**Vocabulary Size:** {len(vectorizer.get_feature_names_out())} words")
+
+# Show prediction history
+st.divider()
+st.subheader("📜 Prediction History")
+
+csv_file = "prediction_history.csv"
+if Path(csv_file).exists():
+    with open(csv_file, "r", encoding="utf-8") as f:
+        df_history = st.dataframe(f, use_container_width=True)
+    
+    # Download button for CSV
+    with open(csv_file, "r", encoding="utf-8") as f:
+        csv_data = f.read()
+    
+    st.download_button(
+        label="📥 Download Prediction History as CSV",
+        data=csv_data,
+        file_name=f"sentiment_predictions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        mime="text/csv"
+    )
+else:
+    st.info("No predictions yet. Make one above to start tracking!")
