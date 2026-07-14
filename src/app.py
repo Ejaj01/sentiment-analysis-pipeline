@@ -78,12 +78,16 @@ def load_assets():
     model.eval()
     return vectorizer, model
 
-# Save prediction to GitHub using API
+# Save prediction to GitHub using API with debugging
 def save_prediction_to_github(input_text, prediction, sentiment):
+    debug_info = []
     try:
         github_token = st.secrets.get("GITHUB_TOKEN", "")
+        debug_info.append(f"✓ Token retrieved: {'Yes' if github_token else 'No'}")
+        
         if not github_token:
-            return False
+            debug_info.append("✗ ERROR: No GitHub token found in secrets")
+            return False, debug_info
         
         owner = "Ejaj01"
         repo = "sentiment-analysis-pipeline"
@@ -91,6 +95,7 @@ def save_prediction_to_github(input_text, prediction, sentiment):
         
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         new_row = f'{timestamp},{input_text},"{prediction:.4f}",{sentiment}\n'
+        debug_info.append(f"✓ New row created: {new_row[:50]}...")
         
         # Get current file content
         url = f"https://api.github.com/repos/{owner}/{repo}/contents/{file_path}"
@@ -99,30 +104,31 @@ def save_prediction_to_github(input_text, prediction, sentiment):
             "Accept": "application/vnd.github.v3+raw"
         }
         
-        try:
-            response = requests.get(url, headers=headers)
-            if response.status_code == 200:
-                # File exists, append to it
-                current_content = response.text
-            else:
-                # File doesn't exist, create with header
-                current_content = "Timestamp,Input Text,Prediction Score,Sentiment\n"
-        except:
+        debug_info.append(f"→ Fetching file from GitHub...")
+        response = requests.get(url, headers=headers)
+        debug_info.append(f"  Response status: {response.status_code}")
+        
+        if response.status_code == 200:
+            current_content = response.text
+            debug_info.append(f"✓ File exists, appending...")
+        else:
             current_content = "Timestamp,Input Text,Prediction Score,Sentiment\n"
+            debug_info.append(f"✓ File not found, creating new...")
         
         # Combine content
         new_content = current_content + new_row
         encoded_content = base64.b64encode(new_content.encode()).decode()
+        debug_info.append(f"✓ Content encoded (length: {len(encoded_content)})")
         
         # Get file SHA for update
+        sha = None
         try:
-            sha_response = requests.get(url, headers=headers)
+            sha_response = requests.get(url, headers={"Authorization": f"token {github_token}"})
             if sha_response.status_code == 200:
-                sha = sha_response.json()["sha"]
-            else:
-                sha = None
-        except:
-            sha = None
+                sha = sha_response.json().get("sha")
+                debug_info.append(f"✓ SHA retrieved: {sha[:10]}...")
+        except Exception as e:
+            debug_info.append(f"⚠ Could not retrieve SHA: {str(e)}")
         
         # Prepare commit data
         commit_data = {
@@ -137,11 +143,20 @@ def save_prediction_to_github(input_text, prediction, sentiment):
         headers["Content-Type"] = "application/json"
         
         # Push to GitHub
+        debug_info.append(f"→ Pushing to GitHub...")
         response = requests.put(url, json=commit_data, headers=headers)
-        return response.status_code in [200, 201]
+        debug_info.append(f"  Response status: {response.status_code}")
+        
+        if response.status_code in [200, 201]:
+            debug_info.append(f"✅ SUCCESS: Prediction saved to GitHub!")
+            return True, debug_info
+        else:
+            debug_info.append(f"✗ FAILED: {response.text[:100]}")
+            return False, debug_info
+            
     except Exception as e:
-        # Silently fail
-        return False
+        debug_info.append(f"✗ EXCEPTION: {str(e)}")
+        return False, debug_info
 
 # Load model
 vectorizer, model = load_assets()
@@ -173,8 +188,8 @@ if st.button("Analyze Sentiment", use_container_width=True):
         # Determine sentiment
         sentiment = "Positive" if prediction >= 0.5 else "Negative"
         
-        # Save to GitHub (silently in background)
-        save_prediction_to_github(user_input, prediction, sentiment)
+        # Save to GitHub and get debug info
+        success, debug_info = save_prediction_to_github(user_input, prediction, sentiment)
 
         # Display results cleanly based on the 0 to 1 confidence score
         st.write("---")
@@ -186,6 +201,17 @@ if st.button("Analyze Sentiment", use_container_width=True):
             st.error(f"❌ **Negative Sentiment Detected!** (Confidence: {(1 - prediction) * 100:.1f}%)")
         
         st.divider()
+        
+        # Show debug information
+        with st.expander("🔧 Debug Info - GitHub Save Status"):
+            if success:
+                st.success("✅ Prediction saved to GitHub successfully!")
+            else:
+                st.error("❌ Failed to save prediction to GitHub")
+            
+            st.write("**Debug Log:**")
+            for info in debug_info:
+                st.code(info, language=None)
         
         # Show model details
         with st.expander("📊 Model Details"):
