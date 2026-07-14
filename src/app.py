@@ -6,6 +6,8 @@ import os
 import csv
 from pathlib import Path
 from datetime import datetime
+import subprocess
+import json
 
 # Define the Neural Network structure
 class SentimentClassifier(nn.Module):
@@ -76,8 +78,8 @@ def load_assets():
     model.eval()
     return vectorizer, model
 
-# Save prediction to CSV
-def save_prediction_to_csv(input_text, prediction, sentiment):
+# Save prediction to CSV and push to GitHub
+def save_and_commit_prediction(input_text, prediction, sentiment):
     csv_file = "prediction_history.csv"
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
@@ -89,6 +91,24 @@ def save_prediction_to_csv(input_text, prediction, sentiment):
         if not file_exists:
             writer.writerow(["Timestamp", "Input Text", "Prediction Score", "Sentiment"])
         writer.writerow([timestamp, input_text, f"{prediction:.4f}", sentiment])
+    
+    # Try to commit to GitHub (silent - no user interaction)
+    try:
+        # Configure git
+        os.system('git config --global user.email "sentiment-bot@streamlit.app"')
+        os.system('git config --global user.name "Sentiment Bot"')
+        
+        # Add and commit
+        os.system('git add prediction_history.csv')
+        os.system('git commit -m "Auto: Add prediction - {} [{}]"'.format(input_text[:30], sentiment))
+        
+        # Push to GitHub with token
+        github_token = st.secrets.get("GITHUB_TOKEN", "")
+        if github_token:
+            os.system('git push https://{}@github.com/Ejaj01/sentiment-analysis-pipeline.git main'.format(github_token))
+    except Exception as e:
+        # Silently fail - don't show errors to user
+        pass
 
 # Load model
 vectorizer, model = load_assets()
@@ -120,8 +140,8 @@ if st.button("Analyze Sentiment", use_container_width=True):
         # Determine sentiment
         sentiment = "Positive" if prediction >= 0.5 else "Negative"
         
-        # Save to CSV
-        save_prediction_to_csv(user_input, prediction, sentiment)
+        # Save to CSV and push to GitHub (silently in background)
+        save_and_commit_prediction(user_input, prediction, sentiment)
 
         # Display results cleanly based on the 0 to 1 confidence score
         st.write("---")
@@ -139,25 +159,3 @@ if st.button("Analyze Sentiment", use_container_width=True):
             st.write(f"**Input Text:** {user_input}")
             st.write(f"**Raw Prediction Score:** {prediction:.6f}")
             st.write(f"**Vocabulary Size:** {len(vectorizer.get_feature_names_out())} words")
-
-# Show prediction history
-st.divider()
-st.subheader("📜 Prediction History")
-
-csv_file = "prediction_history.csv"
-if Path(csv_file).exists():
-    with open(csv_file, "r", encoding="utf-8") as f:
-        df_history = st.dataframe(f, use_container_width=True)
-    
-    # Download button for CSV
-    with open(csv_file, "r", encoding="utf-8") as f:
-        csv_data = f.read()
-    
-    st.download_button(
-        label="📥 Download Prediction History as CSV",
-        data=csv_data,
-        file_name=f"sentiment_predictions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-        mime="text/csv"
-    )
-else:
-    st.info("No predictions yet. Make one above to start tracking!")
