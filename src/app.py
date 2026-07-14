@@ -6,8 +6,8 @@ import os
 import csv
 from pathlib import Path
 from datetime import datetime
-import subprocess
-import json
+import requests
+import base64
 
 # Define the Neural Network structure
 class SentimentClassifier(nn.Module):
@@ -78,37 +78,70 @@ def load_assets():
     model.eval()
     return vectorizer, model
 
-# Save prediction to CSV and push to GitHub
-def save_and_commit_prediction(input_text, prediction, sentiment):
-    csv_file = "prediction_history.csv"
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    # Check if file exists to determine if we need to write headers
-    file_exists = Path(csv_file).exists()
-    
-    with open(csv_file, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        if not file_exists:
-            writer.writerow(["Timestamp", "Input Text", "Prediction Score", "Sentiment"])
-        writer.writerow([timestamp, input_text, f"{prediction:.4f}", sentiment])
-    
-    # Try to commit to GitHub (silent - no user interaction)
+# Save prediction to GitHub using API
+def save_prediction_to_github(input_text, prediction, sentiment):
     try:
-        # Configure git
-        os.system('git config --global user.email "sentiment-bot@streamlit.app"')
-        os.system('git config --global user.name "Sentiment Bot"')
-        
-        # Add and commit
-        os.system('git add prediction_history.csv')
-        os.system('git commit -m "Auto: Add prediction - {} [{}]"'.format(input_text[:30], sentiment))
-        
-        # Push to GitHub with token
         github_token = st.secrets.get("GITHUB_TOKEN", "")
-        if github_token:
-            os.system('git push https://{}@github.com/Ejaj01/sentiment-analysis-pipeline.git main'.format(github_token))
+        if not github_token:
+            return False
+        
+        owner = "Ejaj01"
+        repo = "sentiment-analysis-pipeline"
+        file_path = "prediction_history.csv"
+        
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        new_row = f'{timestamp},{input_text},"{prediction:.4f}",{sentiment}\n'
+        
+        # Get current file content
+        url = f"https://api.github.com/repos/{owner}/{repo}/contents/{file_path}"
+        headers = {
+            "Authorization": f"token {github_token}",
+            "Accept": "application/vnd.github.v3+raw"
+        }
+        
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                # File exists, append to it
+                current_content = response.text
+            else:
+                # File doesn't exist, create with header
+                current_content = "Timestamp,Input Text,Prediction Score,Sentiment\n"
+        except:
+            current_content = "Timestamp,Input Text,Prediction Score,Sentiment\n"
+        
+        # Combine content
+        new_content = current_content + new_row
+        encoded_content = base64.b64encode(new_content.encode()).decode()
+        
+        # Get file SHA for update
+        try:
+            sha_response = requests.get(url, headers=headers)
+            if sha_response.status_code == 200:
+                sha = sha_response.json()["sha"]
+            else:
+                sha = None
+        except:
+            sha = None
+        
+        # Prepare commit data
+        commit_data = {
+            "message": f"Auto: Add prediction - {input_text[:30]}... [{sentiment}]",
+            "content": encoded_content,
+            "branch": "main"
+        }
+        
+        if sha:
+            commit_data["sha"] = sha
+        
+        headers["Content-Type"] = "application/json"
+        
+        # Push to GitHub
+        response = requests.put(url, json=commit_data, headers=headers)
+        return response.status_code in [200, 201]
     except Exception as e:
-        # Silently fail - don't show errors to user
-        pass
+        # Silently fail
+        return False
 
 # Load model
 vectorizer, model = load_assets()
@@ -140,8 +173,8 @@ if st.button("Analyze Sentiment", use_container_width=True):
         # Determine sentiment
         sentiment = "Positive" if prediction >= 0.5 else "Negative"
         
-        # Save to CSV and push to GitHub (silently in background)
-        save_and_commit_prediction(user_input, prediction, sentiment)
+        # Save to GitHub (silently in background)
+        save_prediction_to_github(user_input, prediction, sentiment)
 
         # Display results cleanly based on the 0 to 1 confidence score
         st.write("---")
